@@ -2,77 +2,26 @@
 # vim: syntax=awk tabstop=4
 BEGIN {
 		"hash tput 2>/dev/null && tput cols || echo 80" | getline maxlen["term"]
-		if (ARGV[1])
-				location=ARGV[1]
-		else
-				location="/"
-
 		heading_names="Subvolume"
 		heading_total="Total"
 		heading_exclusive="Exclusive"
 		heading_id="ID"
+		"mktemp -u -p '' subvol-XXX" | getline tempsubvol
+		"mktemp -u -p '' qgroup-XXX" | getline tempqgroup
+		system("mkfifo "tempsubvol" "tempqgroup)
+		system("btrfs sub list -t / > "tempsubvol" &")
+		system("btrfs qgroup show --raw / > "tempqgroup" &")
+		ARGV[1]=tempsubvol
+		ARGV[2]=tempqgroup
+		ARGC=3
 
 		maxlen["names"] = length(heading_names)
 		maxlen["totals"] = length(heading_total)
 		maxlen["exclusive"] = length(heading_exclusive)
 		maxlen["id"] = length(heading_id)
-
-		lineno=0
-		while (("btrfs sub list -t "location | getline) > 0) {
-				if (lineno++ < 2)
-						continue
-				names[$1]=$4
-
-				if (length(names[$1]) > maxlen["names"])
-						maxlen["names"]=length(names[$1])
-
-				if (length($1) > maxlen["id"])
-						maxlen["id"]=length($1)
-		}
-
-		# btrfs will output error for us, so we just need to exit
-		if (close("btrfs sub list -t "location) != 0)
-				exit 1
-
-		lineno=0
-		while (("btrfs qgroup show --raw "location | getline) > 0) {
-				if (lineno++ < 2)
-						continue
-				split($1,ids,"/")
-
-				exclusivetotal+=$3
-
-				exclusive[ids[2]]=readable($3)
-				if (length(exclusive[ids[2]]) > maxlen["exclusive"])
-						maxlen["exclusive"]=length(exclusive[ids[2]])
-
-				totals[ids[2]]=readable($2)
-				if (length(totals[ids[2]]) > maxlen["totals"])
-						maxlen["totals"]=length(totals[ids[2]])
-		}
-
-		if (close("btrfs qgroup show --raw "location) != 0)
-				exit 1
-
-		# The -6 and +6 below are for the two spaces between the columns
-		pathwidth=maxlen["term"] - maxlen["totals"] - maxlen["exclusive"] - maxlen["id"] - 6
-
-		trimsubs(pathwidth)
-
-		totalwidth=maxlen["id"] + maxlen["totals"] + maxlen["exclusive"] + maxlen["names"] + 6
-
-		fmtstring="%-"maxlen["names"]"s  %"maxlen["totals"]"s  %"maxlen["exclusive"]"s  %"maxlen["id"]"s\n"
-		printf fmtstring,heading_names,heading_total,heading_exclusive,heading_id
-		dashes=getdashes(totalwidth)
-		print dashes
-
-		for (i in names)
-				printf fmtstring,names[i],totals[i],exclusive[i],i
-
-		print dashes
-		printf fmtstring,"Exclusive Total:","",readable(exclusivetotal),""
-
 }
+
+FNR<=2 { next }
 
 function getdashes(width) {
 		s=sprintf("%"width"s","")
@@ -126,4 +75,54 @@ function readable(size) {
 				suff="B"
 
 		return sprintf("%.2f%s", size, suff)
+}
+
+#FNR==NR && /^[[:digit:]]+\s+[[:digit:]]+\s+[[:digit:]]+\s+.*\// {
+#	names[$1]=trimpaths($4)
+#	next
+#}
+
+FNR==NR {
+		names[$1]=$4
+
+		if (length(names[$1]) > maxlen["names"])
+				maxlen["names"]=length(names[$1])
+
+		if (length($1) > maxlen["id"])
+				maxlen["id"]=length($1)
+		next
+}
+
+/[[:digit:]]+\/[[:digit:]]+\s+/ {
+		split($1,ids,"/")
+
+		exclusivetotal+=$3
+
+		exclusive[ids[2]]=readable($3)
+		if (length(exclusive[ids[2]]) > maxlen["exclusive"])
+				maxlen["exclusive"]=length(exclusive[ids[2]])
+
+		totals[ids[2]]=readable($2)
+		if (length(totals[ids[2]]) > maxlen["totals"])
+				maxlen["totals"]=length(totals[ids[2]])
+}
+
+END {
+		pathwidth=maxlen["term"] - maxlen["totals"] - maxlen["exclusive"] - maxlen["id"] - 6
+
+		trimsubs(pathwidth)
+
+		totalwidth=maxlen["id"] + maxlen["totals"] + maxlen["exclusive"] + maxlen["names"] + 6
+
+		fmtstring="%-"maxlen["names"]"s  %"maxlen["totals"]"s  %"maxlen["exclusive"]"s  %"maxlen["id"]"s\n"
+		printf fmtstring,heading_names,heading_total,heading_exclusive,heading_id
+		dashes=getdashes(totalwidth)
+		print dashes
+
+		for (i in names)
+				printf fmtstring,names[i],totals[i],exclusive[i],i
+
+		print dashes
+		printf fmtstring,"Exclusive Total:","",readable(exclusivetotal),""
+		system("rm -f "tempsubvol" "tempqgroup)
 }
