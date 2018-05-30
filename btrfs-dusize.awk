@@ -1,18 +1,3 @@
-#!/usr/bin/env bash
-# vim: syntax=sh
-
-abort() {
-	printf "%b\n" "$@" >&2
-	exit 1
-}
-
-cd "${BASH_SOURCE%/*}" || abort "Unable to find script location, aborting"
-
-LOCATION=${1:-/}
-[ -d "$LOCATION" ] || abort "$LOCATION not found, aborting" >&2
-[ "$(stat -fc%T "$LOCATION")" != "btrfs" ] && abort "$LOCATION is not in a BTRFS system" >&2
-
-gawk -f /dev/fd/3 <(btrfs sub list -t "$LOCATION") <(btrfs qgroup show --raw "$LOCATION") 3<< \EOF
 #!/usr/bin/gawk -f
 # vim: syntax=awk tabstop=4
 BEGIN {
@@ -132,4 +117,3 @@ END {
 		print dashes
 		printf fmtstring,"Exclusive Total:","",readable(exclusivetotal),""
 }
-EOF

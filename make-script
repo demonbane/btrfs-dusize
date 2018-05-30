@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+cat btrfs-dusize.head btrfs-dusize.awk <(echo EOF) > btrfs-dusize
+chmod 755 btrfs-dusize
