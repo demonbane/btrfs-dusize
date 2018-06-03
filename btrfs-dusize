@@ -1,8 +1,12 @@
-#!/usr/bin/gawk -f
+#!/usr/bin/gawk -E
 # vim: syntax=awk tabstop=4
 BEGIN {
 		"hash tput 2>/dev/null && tput cols || echo 80" | getline maxlen["term"]
-		if (ARGV[1])
+		if (ARGV[1] == "-h" || ARGV[1] == "--help") {
+				print "Usage: btrfs-dusize [VOLUME PATH]"
+				exit
+		}
+		else if (ARGV[1])
 				location=ARGV[1]
 		else
 				location="/"
